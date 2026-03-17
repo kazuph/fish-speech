@@ -86,9 +86,13 @@ def build_app(inference_fct: Callable, theme: str = "light") -> gr.Blocks:
                                     )
                                 )
                             with gr.Row():
+                                gr.Markdown(
+                                    "For multi-speaker dialogue, upload references in slot order and use `<|speaker:0|>`, `<|speaker:1|>`, `<|speaker:2|>` in Input Text."
+                                )
+                            with gr.Row():
                                 reference_id = gr.Textbox(
                                     label=i18n("Reference ID"),
-                                    placeholder="Leave empty to use uploaded references",
+                                    placeholder="Leave empty to use uploaded references. If uploads are present, uploads take priority.",
                                 )
 
                             with gr.Row():
@@ -98,18 +102,27 @@ def build_app(inference_fct: Callable, theme: str = "light") -> gr.Blocks:
                                     value="on",
                                 )
 
-                            with gr.Row():
-                                reference_audio = gr.Audio(
-                                    label=i18n("Reference Audio"),
-                                    type="filepath",
-                                )
-                            with gr.Row():
-                                reference_text = gr.Textbox(
-                                    label=i18n("Reference Text"),
-                                    lines=1,
-                                    placeholder="在一无所知中，梦里的一天结束了，一个新的「轮回」便会开始。",
-                                    value="",
-                                )
+                            reference_inputs = []
+                            for speaker_idx in range(3):
+                                with gr.Row():
+                                    gr.Markdown(f"### Speaker {speaker_idx}")
+                                with gr.Row():
+                                    reference_audio = (
+                                        gr.Audio(
+                                            label=f"{i18n('Reference Audio')} {speaker_idx}",
+                                            type="filepath",
+                                        )
+                                    )
+                                with gr.Row():
+                                    reference_text = (
+                                        gr.Textbox(
+                                            label=f"{i18n('Reference Text')} {speaker_idx}",
+                                            lines=2,
+                                            placeholder="Reference transcription for this speaker",
+                                            value="",
+                                        )
+                                    )
+                                reference_inputs.extend([reference_audio, reference_text])
 
             with gr.Column(scale=3):
                 with gr.Row():
@@ -138,8 +151,7 @@ def build_app(inference_fct: Callable, theme: str = "light") -> gr.Blocks:
             [
                 text,
                 reference_id,
-                reference_audio,
-                reference_text,
+                *reference_inputs,
                 max_new_tokens,
                 chunk_length,
                 top_p,

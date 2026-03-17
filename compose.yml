@@ -1,26 +1,52 @@
 name: fish-speech
 
+x-app-base: &app-base
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+    args:
+      BACKEND: ${BACKEND:-cuda}
+      UV_EXTRA: ${UV_EXTRA:-cu126}
+      UV_VERSION: ${UV_VERSION:-0.8.15}
+  volumes:
+    - ./checkpoints:/app/checkpoints
+    - ./references:/app/references
+  environment:
+    BACKEND: ${BACKEND:-cuda}
+    COMPILE: ${COMPILE:-1}
+  gpus: ${DOCKER_GPUS:-all}
+  tty: true
+  stdin_open: true
+
 services:
   webui:
-    extends:
-      file: compose.base.yml
-      service: app-base
+    <<: *app-base
     build:
+      context: .
+      dockerfile: docker/Dockerfile
       target: webui
+      args:
+        BACKEND: ${BACKEND:-cuda}
+        UV_EXTRA: ${UV_EXTRA:-cu126}
+        UV_VERSION: ${UV_VERSION:-0.8.15}
     environment:
-      COMPILE: ${COMPILE:-0}
+      BACKEND: ${BACKEND:-cuda}
+      COMPILE: ${COMPILE_WEBUI:-0}
+      FISH_SPEECH_WEBUI_WARMUP: ${FISH_SPEECH_WEBUI_WARMUP:-0}
     profiles: ["webui"]
     ports:
       - "${GRADIO_PORT:-7860}:7860"
 
   server:
-    extends:
-      file: compose.base.yml
-      service: app-base
+    <<: *app-base
     build:
+      context: .
+      dockerfile: docker/Dockerfile
       target: server
-    environment:
-      COMPILE: ${COMPILE:-0}
+      args:
+        BACKEND: ${BACKEND:-cuda}
+        UV_EXTRA: ${UV_EXTRA:-cu126}
+        UV_VERSION: ${UV_VERSION:-0.8.15}
     profiles: ["server"]
     ports:
       - "${API_PORT:-8080}:8080"

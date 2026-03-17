@@ -37,13 +37,37 @@ def parse_args():
     parser.add_argument("--compile", action="store_true")
     parser.add_argument("--max-gradio-length", type=int, default=0)
     parser.add_argument("--theme", type=str, default="light")
+    parser.add_argument(
+        "--warmup",
+        action="store_true",
+        default=os.getenv("FISH_SPEECH_WEBUI_WARMUP", "0").lower()
+        in {"1", "true", "yes"},
+    )
 
     return parser.parse_args()
 
 
+def configure_runtime(device: str) -> None:
+    if device != "cuda":
+        return
+
+    torch.set_float32_matmul_precision("high")
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cudnn.benchmark = True
+
+
+def resolve_precision(args) -> torch.dtype:
+    if args.device == "cuda":
+        if not args.half:
+            logger.info("CUDA detected, defaulting to float16 for faster inference.")
+        return torch.half
+
+    return torch.half if args.half else torch.bfloat16
+
+
 if __name__ == "__main__":
     args = parse_args()
-    args.precision = torch.half if args.half else torch.bfloat16
 
     # Check if MPS or CUDA is available
     if torch.backends.mps.is_available():
@@ -55,6 +79,9 @@ if __name__ == "__main__":
     elif not torch.cuda.is_available():
         logger.info("CUDA is not available, running on CPU.")
         args.device = "cpu"
+
+    configure_runtime(args.device)
+    args.precision = resolve_precision(args)
 
     logger.info("Loading Llama model...")
     llama_queue = launch_thread_safe_queue(
@@ -81,24 +108,28 @@ if __name__ == "__main__":
         precision=args.precision,
     )
 
-    # Dry run to check if the model is loaded correctly and avoid the first-time latency
-    list(
-        inference_engine.inference(
-            ServeTTSRequest(
-                text="Hello world.",
-                references=[],
-                reference_id=None,
-                max_new_tokens=1024,
-                chunk_length=200,
-                top_p=0.7,
-                repetition_penalty=1.5,
-                temperature=0.7,
-                format="wav",
+    if args.warmup:
+        logger.info("Running warmup inference...")
+
+        # Dry run to check if the model is loaded correctly and avoid the first-time latency
+        list(
+            inference_engine.inference(
+                ServeTTSRequest(
+                    text="Hello world.",
+                    references=[],
+                    reference_id=None,
+                    max_new_tokens=1024,
+                    chunk_length=200,
+                    top_p=0.7,
+                    repetition_penalty=1.5,
+                    temperature=0.7,
+                    format="wav",
+                )
             )
         )
-    )
-
-    logger.info("Warming up done, launching the web UI...")
+        logger.info("Warming up done, launching the web UI...")
+    else:
+        logger.info("Skipping warmup inference, launching the web UI...")
 
     # Get the inference function with the immutable arguments
     inference_fct = get_inference_wrapper(inference_engine)

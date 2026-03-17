@@ -25,8 +25,6 @@ class ModelManager:
         self.half = half
         self.compile = compile
 
-        self.precision = torch.half if half else torch.bfloat16
-
         # Check if MPS or CUDA is available
         if torch.backends.mps.is_available():
             self.device = "mps"
@@ -34,6 +32,9 @@ class ModelManager:
         elif not torch.cuda.is_available():
             self.device = "cpu"
             logger.info("CUDA is not available, running on CPU.")
+
+        self.configure_runtime()
+        self.precision = self.resolve_precision()
 
         # Load the TTS models
         self.load_llama_model(
@@ -52,6 +53,23 @@ class ModelManager:
         # Warm up the models
         if self.mode == "tts":
             self.warm_up(self.tts_inference_engine)
+
+    def configure_runtime(self) -> None:
+        if self.device != "cuda":
+            return
+
+        torch.set_float32_matmul_precision("high")
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        torch.backends.cudnn.benchmark = True
+
+    def resolve_precision(self) -> torch.dtype:
+        if self.device == "cuda":
+            if not self.half:
+                logger.info("CUDA detected, defaulting to float16 for faster inference.")
+            return torch.half
+
+        return torch.half if self.half else torch.bfloat16
 
     def load_llama_model(
         self, checkpoint_path, device, precision, compile, mode

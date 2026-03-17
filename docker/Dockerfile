@@ -320,7 +320,7 @@ RUN printf '%s\n' \
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:${GRADIO_SERVER_PORT}/health || exit 1
+    CMD curl -f http://localhost:${GRADIO_SERVER_PORT}/ || exit 1
 
 ENTRYPOINT ["/app/start_webui.sh"]
 
